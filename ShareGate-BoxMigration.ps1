@@ -62,4 +62,4 @@ $copysettings = New-CopySettings -OnContentItemExists IncrementalUpdate
 
 # Import Box documents to the SharePoint document library
 # using the specified Box user and destination list
-Import-BoxDocument -Box $box -UserEmail spdev-customer3@kennethcarnes.com -DestinationList $dstList -NormalMode
+Import-BoxDocument -Box $box -UserEmail spdev-customer3@kennethcarnes.com -DestinationList $dstList -NormalMode 
