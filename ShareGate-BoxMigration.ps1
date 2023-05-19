@@ -1,65 +1,82 @@
-# Import the ShareGate Module
-Import-Module Sharegate
+function Invoke-MyFunction {
+    <#
+        .SYNOPSIS
+        migrates stuf from a to b.
 
-# Specify the path of a CSV file containing a list of emails
-$csvFile = "C:\onedrivemigration.csv"
+        .DESCRIPTION
+        migrates stuff from a to b.
 
-# Import the CSV file as a table
-$table = Import-Csv $csvFile -Delimiter ","
+        .PARAMETER EmailAddress
+        Description of Parameter.
 
-# Connect to Box using admin credentials
-$box = Connect-Box -Email spdev-customer1@kennethcarnes.com -Admin
+        .EXAMPLE
+        Invoke-MyFunction -CsvPath C:\temp\emails.csv
 
-# Connect to the SharePoint admin site
-$tenant = Connect-Site -Url https://kennethcarnes-admin.sharepoint.com -Browser
+        Explanation of example
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, HelpMessage = "List of email addresses to migrate")]
+        [string]$CsvPath
+    )
 
-# Set the copy settings to incremental update
-$copysettings = New-CopySettings -OnContentItemExists IncrementalUpdate
+    begin {
+        Write-Verbose "$($MyInvocation.MyCommand.Name) :: BEGIN :: $(Get-Date)"
+    }
 
-# Provision any necessary OneDrive URLs at least 24 hours in advance
-# https://documentation.sharegate.com/hc/en-us/articles/115000641328
-$tenant = Connect-Site -Url https://kennethcarnes-admin.sharepoint.com -Browser
-$oneDriveUrl = Get-OneDriveUrl -Tenant $tenant -Email spdev-customer2@kennethcarnes.com -ProvisionIfRequired
+    process {
+        Write-Verbose "Importing the ShareGate Module"
+        Import-Module Sharegate
 
-# Perform incremental migration of Box user data into OneDrive for Business
-# https://documentation.sharegate.com/hc/en-us/articles/115000321633-Walkthrough-Import-from-Box-com-to-OneDrive-for-Business-in-PowerShell
-Set-Variable dstSite, dstList
-foreach ($row in $table) {
-    Clear-Variable dstSite
-    Clear-Variable dstList
-    
-    # Get the OneDrive URL for the user's email
-    $dstSiteURL = Get-OneDriveUrl -Tenant $tenant -Email $row.Email
+        $PathExists = Test-Path -Path $CsvPath
+        if (-not $PathExists) {
+            throw "The path $CsvPath does not exist"
+        }
 
-    # Connect to the destination OneDrive site
-    $dstSite = Connect-Site -Url $dstSiteURL -UseCredentialsFrom $tenant
+        $Emails = (Import-Csv -Path $CsvPath).Emails
 
-    # Add the site collection administrator
-    Add-SiteCollectionAdministrator -Site $dstSite
+        Write-Verbose "Connecting to the box account"
+        $box = Connect-Box -Email spdev-customer1@kennethcarnes.com -Admin
 
-    # Get the "Documents" list in the destination site
-    $dstList = Get-List -Site $dstSite -name "Documents"
+        Write-Verbose "Connecting to the sharepoint account"
+        $tenant = Connect-Site -Url https://kennethcarnes-admin.sharepoint.com -Browser
 
-    # Import the Box documents to the destination list
-    Import-BoxDocument -Box $box -DestinationList $dstList -UserEmail $row.Email -copysettings $copysettings -NormalMode
+        Write-Verbose "Setting the copy settings to incremental update"
+        $copysettings = New-CopySettings -OnContentItemExists IncrementalUpdate
 
-    # Remove the site collection administrator
-    Remove-SiteCollectionAdministrator -Site $dstSite
+        # Provision any necessary OneDrive URLs at least 24 hours in advance
+        # https://documentation.sharegate.com/hc/en-us/articles/115000641328
+        $tenant      = Connect-Site -Url https://kennethcarnes-admin.sharepoint.com -Browser
+        $oneDriveUrl = Get-OneDriveUrl -Tenant $tenant -Email spdev-customer2@kennethcarnes.com -ProvisionIfRequired
+
+        # Perform incremental migration of Box user data into OneDrive for Business
+        # https://documentation.sharegate.com/hc/en-us/articles/115000321633-Walkthrough-Import-from-Box-com-to-OneDrive-for-Business-in-PowerShell
+        foreach ($Email in $Emails) {
+            Write-Verbose "Working on $Email"
+
+            # Get the OneDrive URL for the user's email
+            Write-Verbose "$Email :: Getting the OneDrive drive URL"
+            $dstSiteURL = Get-OneDriveUrl -Tenant $tenant -Email $Email
+        
+            # Connect to the destination OneDrive site
+            Write-Verbose "$Email :: Connecting to the destination OneDrive site"
+            $dstSite = Connect-Site -Url $dstSiteURL -UseCredentialsFrom $tenant
+        
+            # Add the site collection administrator
+            Add-SiteCollectionAdministrator -Site $dstSite
+        
+            # Get the "Documents" list in the destination site
+            $dstList = Get-List -Site $dstSite -name "Documents"
+        
+            # Import the Box documents to the destination list
+            Import-BoxDocument -Box $box -DestinationList $dstList -UserEmail $Email -copysettings $copysettings -NormalMode
+        
+            # Remove the site collection administrator
+            Remove-SiteCollectionAdministrator -Site $dstSite
+        }
+    }
+
+    end {
+        Write-Verbose "$($MyInvocation.MyCommand.Name) :: END   :: $(Get-Date)"
+    }
 }
-
-# Import Box user data into SharePoint site document library
-# Connect to Box using admin credentials
-$box = Connect-Box -Email spdev-customer1@kennethcarnes.com -Admin
-
-# Connect to the SharePoint site where the data will be imported
-$dstSite = Connect-Site -Url "https://kennethcarnes.sharepoint.com/sites/internal" -Browser
-
-# Get the list named "BoxTest" in the destination site
-$dstList = Get-List -Name "BoxTest" -Site $dstSite
-
-# Set the copy settings to incremental update
-$copysettings = New-CopySettings -OnContentItemExists IncrementalUpdate
-
-# Import Box documents to the SharePoint document library
-# using the specified Box user and destination list
-Import-BoxDocument -Box $box -UserEmail spdev-customer3@kennethcarnes.com -DestinationList $dstList -NormalMode 
